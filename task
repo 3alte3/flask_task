@@ -1,0 +1,110 @@
+import json
+
+from json2html import *
+import requests
+from flask import Flask, redirect, url_for, session
+from authlib.integrations.flask_client import OAuth
+from flask import request
+
+app = Flask(__name__)
+app.secret_key = "secret_key"
+
+oauth = OAuth(app)
+google = oauth.register(
+    name='google',
+    client_id='671303700208-bqkaa9l103kt5hksdge2gcu10bf5hg00.apps.googleusercontent.com',
+    client_secret="Ao9sjJOQ7f1hAvgKkNYNc1-n",
+    access_token_url='https://accounts.google.com/o/oauth2/token',
+    access_token_params=None,
+    authorize_url='https://accounts.google.com/o/oauth2/auth',
+    authorize_params=None,
+    api_base_url='https://www.googleapis.com/oauth2/v1/',
+    userinfo_endpoint='https://openidconnect.googleapis.com/v1/userinfo',
+    # This is only needed if using openId to fetch user info
+    client_kwargs={'scope': 'openid email profile'},
+)
+
+
+@app.route('/')
+def hello_world():
+    email = dict(session).get('email',None)
+    return f'Hello, you are logged in as {email}!'
+
+
+@app.route('/login')
+def login():
+    google = oauth.create_client("google")
+    redirect_uri = url_for('authorize', _external=True)
+    return google.authorize_redirect(redirect_uri)
+
+
+@app.route('/authorize')
+def authorize():
+    google = oauth.create_client("google")
+    token = google.authorize_access_token()
+    resp = google.get('userinfo')
+    user_info = resp.json()
+    session['email'] = user_info['email']
+    session['id']=user_info['id']
+    session['name']=user_info['name']
+    session['picture'] = user_info['picture']
+    return redirect('/')
+
+@app.route('/about')
+def about():
+    email=session['email']
+    id=session['id']
+    name = session['name']
+    picture=session['picture']
+    return f'Hello, you are logged in as {email}<p></p>your google id is {id} <p></p>' \
+           f'your google name is ' \
+            f'{name}<p></p>profile picture is <img src="{picture}">'
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('hello_world'))
+
+@app.route('/list/<city>')
+def weatherForCity(city):
+    response=requests.get('''https://api.openweathermap.org/data/2.5/forecast?q='''+city+'''&appid=1443b77e2360ffbb6d0da25c36a7f2fa''')
+    data=response.json()
+    
+    return json2html.convert(data)
+
+@app.route('/<city>/<date>')
+def weatherForDate(city,date):
+    url = "https://community-open-weather-map.p.rapidapi.com/forecast"
+    querystring = {"q": f"{city}"}
+    headers = {
+        'x-rapidapi-key': "77850c2bd1msh77602e067ce48f2p1779bfjsn9a6240c4a7bb",
+        'x-rapidapi-host': "community-open-weather-map.p.rapidapi.com"
+    }
+    response = requests.request("GET", url, headers=headers, params=querystring)
+    if date ==0 :
+        return json2html.convert(response.json()['list'][0])
+    else:
+        return json2html.convert(response.json()['list'][4+int(date)*8])
+
+@app.route('/index')
+def index():
+    return '''<ul> 
+                <li> <a href="/login">login</a> 
+                <li> <a href="/logout">logout</a>
+                <li> <a href="/list/Minsk">Погода в city на 7 дней (Меняйте city для получения прогноза 
+                для разных городов)</a>
+                <li> <a href="/about">about</a>
+                <li> <a href="/useragent">Узнать информацию о браузере</a>
+                <li> <a href="/Minsk/0">Получить прогноз на определенную дату</a>
+                <p><h1>Примечание: date изменяется от 
+                0 до 4 , в случае подстановки индекса <0 or >4 будет выброшено исключение . 0 - текущая дата</h1></p>
+              </ul> '''
+
+@app.route("/useragent")
+def userAgent():
+    return f"Hello , u are using {request.user_agent.platform} <p></p>" \
+           f"and your browser is {request.user_agent.browser} <p></p>" \
+           f"current version is {request.user_agent.version}"
+
+if __name__ == '__main__':
+    app.run(debug=True)
