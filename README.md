@@ -1,2 +1,3 @@
 # flask_task
-This repository is used for flask task 
+This project allows you to create your web-microservice . This project is written in python. 
+Starting page - localhost:5000/index , then follow links
